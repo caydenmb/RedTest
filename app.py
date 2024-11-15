@@ -1,24 +1,45 @@
+import os
+import sys
+import logging
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import logging
-import sys
+from logging.handlers import RotatingFileHandler
 
 # Initialize Flask app
 app = Flask(__name__)
 
 # Configure the SQLAlchemy part of the app instance
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://user:password@localhost/dbname'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://user:password@localhost/dbname')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Create database object
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-# Configure Logging
-logging.basicConfig(level=logging.DEBUG, handlers=[
-    logging.StreamHandler(sys.stdout)
-])
+# Set up logging
+if not os.path.exists('logs'):
+    os.mkdir('logs')
+
+formatter = logging.Formatter(
+    '%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] - %(message)s')
+
+# Console logging
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(formatter)
+
+# File logging
+file_handler = RotatingFileHandler('logs/app.log', maxBytes=10240, backupCount=5)
+file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.DEBUG)
+
+# Logger configuration
+app.logger.setLevel(logging.DEBUG)
+app.logger.addHandler(console_handler)
+app.logger.addHandler(file_handler)
+
+# Log application start
+app.logger.info('Starting Flask application...')
 
 # Example Model
 class User(db.Model):
@@ -37,18 +58,26 @@ def index():
 
 @app.route('/users', methods=['POST'])
 def add_user():
-    data = request.get_json()
-    new_user = User(name=data['name'], email=data['email'])
-    db.session.add(new_user)
-    db.session.commit()
-    app.logger.info('New user added: %s', new_user)
-    return jsonify(new_user.to_dict()), 201
+    try:
+        data = request.get_json()
+        new_user = User(name=data['name'], email=data['email'])
+        db.session.add(new_user)
+        db.session.commit()
+        app.logger.info(f'New user added: {new_user.to_dict()}')
+        return jsonify(new_user.to_dict()), 201
+    except Exception as e:
+        app.logger.error(f"Error adding user: {e}", exc_info=True)
+        return jsonify({"error": "Unable to add user"}), 500
 
 @app.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    user = User.query.get_or_404(user_id)
-    app.logger.info('User retrieved: %s', user)
-    return jsonify(user.to_dict())
+    try:
+        user = User.query.get_or_404(user_id)
+        app.logger.info(f'User retrieved: {user.to_dict()}')
+        return jsonify(user.to_dict())
+    except Exception as e:
+        app.logger.error(f"Error retrieving user with id {user_id}: {e}", exc_info=True)
+        return jsonify({"error": "Unable to retrieve user"}), 500
 
 # Entry point
 if __name__ == "__main__":
