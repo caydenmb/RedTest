@@ -1,202 +1,164 @@
 import os
-import requests
-from flask import Flask, render_template, redirect, url_for, session, request, flash
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
 import logging
+from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from datetime import datetime
 
-# Flask application initialization
+# Set up Flask application
 app = Flask(__name__)
-app.config.from_object('config.Config')
-app.secret_key = app.config['SECRET_KEY']
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'mysecret')
 
-# Configure detailed logging for debugging and operations
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler("app.log"),  # Log all messages to 'app.log'
-        logging.StreamHandler()  # Also output messages to the console
-    ]
-)
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///mydb.sqlite3')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Database initialization
-db = SQLAlchemy(app)
+# Set up SQLAlchemy and Migrate
+try:
+    db = SQLAlchemy(app)
+    migrate = Migrate(app, db)
+    logging.info("SQLAlchemy and Flask-Migrate initialized successfully.")
+except AttributeError as e:
+    logging.error(f"Error initializing SQLAlchemy: {e}")
+    raise e
 
-# Import User model after db initialization
-from models import User
+# Set up logging level to debug for detailed output
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s [%(levelname)s] %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
-# API Keys and URLs
-SHUFFLE_API_KEY = app.config['SHUFFLE_API_KEY']
-CHICKEN_API_KEY = app.config['CHICKEN_API_KEY']
-CHICKEN_BASE_URL = "https://affiliates.chicken.gg/v1/referrals?key={api_key}&minTime={min_time}&maxTime={max_time}"
+# Example User model for the database
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
 
-# Log worker startup
-logging.info("Flask application instance initialized and ready to serve requests.")
+# Example Event model
+class Event(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False)
+    end_time = db.Column(db.DateTime, nullable=False)
+    is_active = db.Column(db.Boolean, default=False)
 
-@app.before_first_request
-def before_first_request():
-    logging.info("First request received - initializing any additional components if necessary.")
-    # Create tables if they do not exist
-    db.create_all()
-
-# Utility function for API requests with additional logging
-def fetch_data_from_api(url):
-    try:
-        logging.debug(f"Fetching data from API: {url}")
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        data = response.json()
-        if isinstance(data, list) and len(data) > 0:
-            logging.info(f"Data fetched successfully from API: {url}")
-            return data
-        else:
-            logging.warning(f"No data found for the provided URL: {url}")
-            return {"error": "No data found."}
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error fetching data from API: {e}")
-        return {"error": str(e)}
-
-# Routes
+# Route handlers
 @app.route('/')
 def index():
-    logging.info("Serving the index page.")
-    return render_template('index.html', title='Redhunllef Event Platform')
+    logging.info("Accessed the index route.")
+    active_event = Event.query.filter_by(is_active=True).first()
+    if active_event:
+        logging.debug(f"Active event found: {active_event.name}")
+        return render_template('index.html', event=active_event, title="Home")
+    else:
+        logging.warning("No active event found. Redirecting to 'no_event' page.")
+        return render_template('no_event.html', title="No Event")
 
-@app.route('/shuffle_wager')
-def shuffle_wager():
-    if not config['SHUFFLE_WAGER_ENABLED']:
-        logging.warning("Shuffle Wager Event is disabled - serving no_event page.")
-        return render_template('no_event.html', title='No Race Available')
-
-    # Fetch data from Shuffle API
-    url = f"https://api.shuffle.com/data?key={config['SHUFFLE_API_KEY']}"
-    data = fetch_data_from_api(url)
-    if 'error' in data:
-        flash("There was an issue fetching data from the Shuffle API.")
-    
-    logging.info("Serving Shuffle Wager Event page.")
-    return render_template('shuffle_wager.html', title='Shuffle Wager Event', config=config, data=data)
-
-@app.route('/shuffle_raffle')
-def shuffle_raffle():
-    if not config['SHUFFLE_RAFFLE_ENABLED']:
-        logging.warning("Shuffle Raffle Event is disabled - serving no_event page.")
-        return render_template('no_event.html', title='No Race Available')
-    
-    # Fetch data from Shuffle API for Raffle
-    url = f"https://api.shuffle.com/raffle?key={config['SHUFFLE_API_KEY']}"
-    data = fetch_data_from_api(url)
-    if 'error' in data:
-        flash("There was an issue fetching data from the Shuffle Raffle API.")
-    
-    logging.info("Serving Shuffle Raffle Event page.")
-    return render_template('shuffle_raffle.html', title='Shuffle Raffle Event', config=config, data=data)
-
-@app.route('/chicken')
-def chicken():
-    if not config['CHICKEN_ENABLED']:
-        logging.warning("Chicken.gg Wager Event is disabled - serving no_event page.")
-        return render_template('no_event.html', title='No Race Available')
-    
-    # Fetch data from Chicken API
-    url = CHICKEN_BASE_URL.format(api_key=config['CHICKEN_API_KEY'], min_time=config['START_TIME'], max_time=int(os.getenv('MAX_TIME', 9999999999)))
-    data = fetch_data_from_api(url)
-    if 'error' in data:
-        flash("There was an issue fetching data from the Chicken API.")
-    
-    logging.info("Serving Chicken.gg Wager Event page.")
-    return render_template('chicken.html', title='Chicken.gg Wager Event', config=config, data=data)
-
-@app.route('/admin', methods=['GET', 'POST'])
+@app.route('/admin')
 def admin():
-    if not session.get('logged_in'):
-        flash('You need to log in first.')
+    if 'logged_in' not in session:
         logging.warning("Unauthorized access attempt to admin page.")
         return redirect(url_for('login'))
-    
-    if request.method == 'POST':
-        # Update configuration based on form data
-        config['SHUFFLE_WAGER_ENABLED'] = 'shuffle_wager_enabled' in request.form
-        config['SHUFFLE_RAFFLE_ENABLED'] = 'shuffle_raffle_enabled' in request.form
-        config['CHICKEN_ENABLED'] = 'chicken_enabled' in request.form
-        logging.info(f"Admin updated event settings: {config}")
-
-    logging.info("Serving the admin settings page.")
-    return render_template('admin.html', title='Admin Settings', config=config)
-
-@app.route('/superuser', methods=['GET', 'POST'])
-def superuser():
-    if not session.get('logged_in') or session.get('username') != 'admin':
-        flash('You do not have access to this page.')
-        logging.warning("Unauthorized access attempt to superuser page.")
-        return redirect(url_for('index'))
-
-    if request.method == 'POST':
-        if 'add_user' in request.form:
-            new_username = request.form.get('username')
-            new_password = request.form.get('password')
-            if new_username in users:
-                flash('User already exists.')
-                logging.warning(f"Attempted to add existing user: {new_username}")
-            else:
-                user = User(username=new_username)
-                user.set_password(new_password)
-                db.session.add(user)
-                db.session.commit()
-                flash(f'User {new_username} added successfully.')
-                logging.info(f"Superuser added new user: {new_username}")
-
-        if 'delete_user' in request.form:
-            user_to_delete = request.form.get('delete_user')
-            if user_to_delete != 'admin':
-                user = User.query.filter_by(username=user_to_delete).first()
-                if user:
-                    db.session.delete(user)
-                    db.session.commit()
-                    flash(f'User {user_to_delete} deleted successfully.')
-                    logging.info(f"Superuser deleted user: {user_to_delete}")
-                else:
-                    flash('User not found.')
-                    logging.warning(f"Attempted to delete non-existent user: {user_to_delete}")
-
-        if 'update_api_keys' in request.form:
-            config['SHUFFLE_API_KEY'] = request.form.get('shuffle_api_key')
-            config['CHICKEN_API_KEY'] = request.form.get('chicken_api_key')
-            config['START_TIME'] = request.form.get('start_time')
-            logging.info(f"Superuser updated API keys: {config}")
-
-    logging.info("Serving the superuser settings page.")
-    return render_template('superuser.html', title='Superuser Settings', config=config, users=users)
+    events = Event.query.all()
+    logging.info("Accessed the admin route. Listing all events.")
+    return render_template('admin.html', events=events, title="Admin")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        logging.debug(f"Attempt to login with username: {username}")
+
         user = User.query.filter_by(username=username).first()
-        if user and user.check_password(password):
+        if user and user.password == password:
             session['logged_in'] = True
             session['username'] = username
-            logging.info(f"User {username} logged in.")
-            return redirect(url_for('admin'))
+            logging.info(f"User {username} successfully logged in.")
+            return redirect(url_for('index'))
         else:
-            flash('Invalid username or password.')
             logging.warning(f"Failed login attempt for username: {username}")
-
-    logging.info("Serving the login page.")
-    return render_template('login.html', title='Login')
+            flash('Invalid credentials')
+    
+    return render_template('login.html', title="Login")
 
 @app.route('/logout')
 def logout():
-    logging.info(f"User {session.get('username')} logged out.")
+    logging.info(f"User {session.get('username', 'Unknown')} logged out.")
     session.clear()
     return redirect(url_for('index'))
 
-# Custom 404 error handler to redirect to 404.html
+@app.route('/event/create', methods=['GET', 'POST'])
+def create_event():
+    if 'logged_in' not in session:
+        logging.warning("Unauthorized access attempt to create an event.")
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        name = request.form['name']
+        start_time = datetime.strptime(request.form['start_time'], '%Y-%m-%d %H:%M:%S')
+        end_time = datetime.strptime(request.form['end_time'], '%Y-%m-%d %H:%M:%S')
+        is_active = request.form.get('is_active') == 'on'
+
+        new_event = Event(name=name, start_time=start_time, end_time=end_time, is_active=is_active)
+        db.session.add(new_event)
+        db.session.commit()
+        logging.info(f"New event '{name}' created successfully.")
+        return redirect(url_for('admin'))
+
+    return render_template('create_event.html', title="Create Event")
+
+@app.route('/event/<int:event_id>/edit', methods=['GET', 'POST'])
+def edit_event(event_id):
+    if 'logged_in' not in session:
+        logging.warning("Unauthorized access attempt to edit an event.")
+        return redirect(url_for('login'))
+
+    event = Event.query.get_or_404(event_id)
+
+    if request.method == 'POST':
+        event.name = request.form['name']
+        event.start_time = datetime.strptime(request.form['start_time'], '%Y-%m-%d %H:%M:%S')
+        event.end_time = datetime.strptime(request.form['end_time'], '%Y-%m-%d %H:%M:%S')
+        event.is_active = request.form.get('is_active') == 'on'
+
+        db.session.commit()
+        logging.info(f"Event '{event.name}' updated successfully.")
+        return redirect(url_for('admin'))
+
+    return render_template('edit_event.html', event=event, title="Edit Event")
+
+@app.route('/event/<int:event_id>/delete', methods=['POST'])
+def delete_event(event_id):
+    if 'logged_in' not in session:
+        logging.warning("Unauthorized access attempt to delete an event.")
+        return redirect(url_for('login'))
+
+    event = Event.query.get_or_404(event_id)
+    db.session.delete(event)
+    db.session.commit()
+    logging.info(f"Event '{event.name}' deleted successfully.")
+    return redirect(url_for('admin'))
+
+@app.route('/api/events')
+def api_events():
+    events = Event.query.all()
+    event_list = [{
+        'id': event.id,
+        'name': event.name,
+        'start_time': event.start_time.strftime('%Y-%m-%d %H:%M:%S'),
+        'end_time': event.end_time.strftime('%Y-%m-%d %H:%M:%S'),
+        'is_active': event.is_active
+    } for event in events]
+    logging.info("API request for events received.")
+    return jsonify(event_list)
+
+# Error handling for 404
 @app.errorhandler(404)
 def page_not_found(e):
-    logging.warning(f"404 error - page not found: {request.path}")
-    return render_template('404.html', title='404 - Page Not Found'), 404
+    logging.error(f"Page not found: {request.url}")
+    return render_template('404.html'), 404
 
-# Note: No app.run() here; Gunicorn will manage the application in production
+# Running the app
+if __name__ == '__main__':
+    logging.info("Starting Flask application.")
+    app.run(debug=False, host='0.0.0.0', port=8000)
