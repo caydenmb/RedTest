@@ -3,9 +3,11 @@
 <div class="event-section">
     <h2>Chicken.gg Wager Event Standings</h2>
     {% if config['CHICKEN_ENABLED'] %}
+        <!-- Placeholder div to be populated dynamically with standings -->
         <div id="chicken-wager-standings"></div>
     {% else %}
         <p>No Race Available</p>
+        <!-- Button to visit Redhunllef's Kick page if event is unavailable -->
         <a href="https://kick.com/redhunllef" class="button">Visit Redhunllef's Kick Page</a>
     {% endif %}
 </div>

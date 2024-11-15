@@ -3,9 +3,11 @@
 <div class="event-section">
     <h2>Shuffle Raffle Event Standings</h2>
     {% if config['SHUFFLE_RAFFLE_ENABLED'] %}
+        <!-- Placeholder div for raffle standings -->
         <div id="shuffle-raffle-standings"></div>
     {% else %}
         <p>No Race Available</p>
+        <!-- Button to visit Kick page if the event is disabled -->
         <a href="https://kick.com/redhunllef" class="button">Visit Redhunllef's Kick Page</a>
     {% endif %}
 </div>

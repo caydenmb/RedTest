@@ -3,9 +3,11 @@
 <div class="event-section">
     <h2>Shuffle Wager Event Standings</h2>
     {% if config['SHUFFLE_WAGER_ENABLED'] %}
+        <!-- Placeholder div to show the top wagerers dynamically -->
         <div id="shuffle-wager-standings"></div>
     {% else %}
         <p>No Race Available</p>
+        <!-- Link to Kick page if no event is enabled -->
         <a href="https://kick.com/redhunllef" class="button">Visit Redhunllef's Kick Page</a>
     {% endif %}
 </div>

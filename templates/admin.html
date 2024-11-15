@@ -3,12 +3,15 @@
 <h2>Admin Settings</h2>
 <form action="" method="POST">
     <h3>Enable or Disable Events</h3>
+    <!-- Checkbox to enable or disable Shuffle Wager Event -->
     <label>
         <input type="checkbox" name="shuffle_wager_enabled" {% if config['SHUFFLE_WAGER_ENABLED'] %}checked{% endif %}> Shuffle Wager Event
     </label><br>
+    <!-- Checkbox to enable or disable Shuffle Raffle Event -->
     <label>
         <input type="checkbox" name="shuffle_raffle_enabled" {% if config['SHUFFLE_RAFFLE_ENABLED'] %}checked{% endif %}> Shuffle Raffle Event
     </label><br>
+    <!-- Checkbox to enable or disable Chicken.gg Wager Event -->
     <label>
         <input type="checkbox" name="chicken_enabled" {% if config['CHICKEN_ENABLED'] %}checked{% endif %}> Chicken.gg Wager Event
     </label><br><br>

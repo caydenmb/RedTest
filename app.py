@@ -1,12 +1,14 @@
 import os
 import requests
 from flask import Flask, render_template, redirect, url_for, session, request, flash
+from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
 
 # Flask application initialization
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Replace with a secure value
+app.config.from_object('config.Config')
+app.secret_key = app.config['SECRET_KEY']
 
 # Configure detailed logging for debugging and operations
 logging.basicConfig(
@@ -18,23 +20,16 @@ logging.basicConfig(
     ]
 )
 
-# API Keys and URLs
-SHUFFLE_API_KEY = "f45f746d-b021-494d-b9b6-b47628ee5cc9"
-CHICKEN_API_KEY = "316a2f45bff17a887b8a37748e61ac06"
-CHICKEN_BASE_URL = "https://affiliates.chicken.gg/v1/referrals?key={api_key}&minTime={min_time}&maxTime={max_time}"
+# Database initialization
+db = SQLAlchemy(app)
 
-# In-memory storage for users and application configuration (Note: Replace with a database for production)
-users = {
-    'admin': generate_password_hash('password')  # Default admin credentials
-}
-config = {
-    'SHUFFLE_WAGER_ENABLED': True,
-    'SHUFFLE_RAFFLE_ENABLED': True,
-    'CHICKEN_ENABLED': True,
-    'SHUFFLE_API_KEY': SHUFFLE_API_KEY,
-    'CHICKEN_API_KEY': CHICKEN_API_KEY,
-    'START_TIME': 1620000000  # Example start time in epoch format
-}
+# Import User model after db initialization
+from models import User
+
+# API Keys and URLs
+SHUFFLE_API_KEY = app.config['SHUFFLE_API_KEY']
+CHICKEN_API_KEY = app.config['CHICKEN_API_KEY']
+CHICKEN_BASE_URL = "https://affiliates.chicken.gg/v1/referrals?key={api_key}&minTime={min_time}&maxTime={max_time}"
 
 # Log worker startup
 logging.info("Flask application instance initialized and ready to serve requests.")
@@ -42,6 +37,8 @@ logging.info("Flask application instance initialized and ready to serve requests
 @app.before_first_request
 def before_first_request():
     logging.info("First request received - initializing any additional components if necessary.")
+    # Create tables if they do not exist
+    db.create_all()
 
 # Utility function for API requests with additional logging
 def fetch_data_from_api(url):
@@ -60,6 +57,7 @@ def fetch_data_from_api(url):
         logging.error(f"Error fetching data from API: {e}")
         return {"error": str(e)}
 
+# Routes
 @app.route('/')
 def index():
     logging.info("Serving the index page.")
@@ -70,7 +68,7 @@ def shuffle_wager():
     if not config['SHUFFLE_WAGER_ENABLED']:
         logging.warning("Shuffle Wager Event is disabled - serving no_event page.")
         return render_template('no_event.html', title='No Race Available')
-    
+
     # Fetch data from Shuffle API
     url = f"https://api.shuffle.com/data?key={config['SHUFFLE_API_KEY']}"
     data = fetch_data_from_api(url)
@@ -142,19 +140,25 @@ def superuser():
                 flash('User already exists.')
                 logging.warning(f"Attempted to add existing user: {new_username}")
             else:
-                users[new_username] = generate_password_hash(new_password)
+                user = User(username=new_username)
+                user.set_password(new_password)
+                db.session.add(user)
+                db.session.commit()
                 flash(f'User {new_username} added successfully.')
                 logging.info(f"Superuser added new user: {new_username}")
 
         if 'delete_user' in request.form:
             user_to_delete = request.form.get('delete_user')
-            if user_to_delete in users and user_to_delete != 'admin':
-                del users[user_to_delete]
-                flash(f'User {user_to_delete} deleted successfully.')
-                logging.info(f"Superuser deleted user: {user_to_delete}")
-            else:
-                flash('Cannot delete admin or non-existent user.')
-                logging.warning(f"Attempted to delete user: {user_to_delete}")
+            if user_to_delete != 'admin':
+                user = User.query.filter_by(username=user_to_delete).first()
+                if user:
+                    db.session.delete(user)
+                    db.session.commit()
+                    flash(f'User {user_to_delete} deleted successfully.')
+                    logging.info(f"Superuser deleted user: {user_to_delete}")
+                else:
+                    flash('User not found.')
+                    logging.warning(f"Attempted to delete non-existent user: {user_to_delete}")
 
         if 'update_api_keys' in request.form:
             config['SHUFFLE_API_KEY'] = request.form.get('shuffle_api_key')
@@ -170,7 +174,8 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        if username in users and check_password_hash(users[username], password):
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
             session['logged_in'] = True
             session['username'] = username
             logging.info(f"User {username} logged in.")

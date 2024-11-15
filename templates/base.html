@@ -4,15 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
+    <!-- Link to the main stylesheet -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
     <header>
         <div class="logo">
+            <!-- Logo for Redhunllef, linked from static files -->
             <img src="{{ url_for('static', filename='images/redlogo.png') }}" alt="Redhunllef Logo">
         </div>
         <h1>{{ title }}</h1>
     </header>
+    <!-- Sidebar for navigation links -->
     <div class="sidebar">
         <ul>
             <li><a href="{{ url_for('index') }}">Home</a></li>
@@ -30,16 +33,19 @@
             {% endif %}
         </ul>
     </div>
+    <!-- Content block to be replaced in child templates -->
     <div class="content">
         {% block content %}{% endblock %}
     </div>
     <footer>
+        <!-- Sponsor support section -->
         <p>Support Redhunllef by visiting our sponsors below.</p>
         <div class="sponsor-buttons">
             <a href="https://shuffle.com/?r=Red" class="button">Shuffle.com Sponsor</a>
             <a href="https://chicken.gg/r/Red" class="button">Chicken.gg Sponsor</a>
         </div>
     </footer>
+    <!-- JavaScript file for dynamic features -->
     <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 </body>
 </html>
