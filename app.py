@@ -3,11 +3,19 @@ from flask import Flask, render_template, redirect, url_for, session, request, f
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
 
+# Application initialization
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Use a secure key
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+# Configure detailed logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
 
 # In-memory database simulation for users and configuration
 users = {
@@ -24,24 +32,29 @@ config = {
 
 @app.route('/')
 def index():
+    logging.debug("Serving the index page.")
     return render_template('index.html', title='Redhunllef Event Platform')
 
 @app.route('/shuffle_wager')
 def shuffle_wager():
+    logging.debug(f"Shuffle Wager Event requested, enabled status: {config['SHUFFLE_WAGER_ENABLED']}")
     return render_template('shuffle_wager.html', title='Shuffle Wager Event', config=config)
 
 @app.route('/shuffle_raffle')
 def shuffle_raffle():
+    logging.debug(f"Shuffle Raffle Event requested, enabled status: {config['SHUFFLE_RAFFLE_ENABLED']}")
     return render_template('shuffle_raffle.html', title='Shuffle Raffle Event', config=config)
 
 @app.route('/chicken')
 def chicken():
+    logging.debug(f"Chicken.gg Wager Event requested, enabled status: {config['CHICKEN_ENABLED']}")
     return render_template('chicken.html', title='Chicken.gg Wager Event', config=config)
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if not session.get('logged_in'):
         flash('You need to log in first.')
+        logging.warning("Unauthorized access attempt to admin page.")
         return redirect(url_for('login'))
     
     if request.method == 'POST':
@@ -50,12 +63,14 @@ def admin():
         config['CHICKEN_ENABLED'] = 'chicken_enabled' in request.form
         logging.info(f"Admin updated event settings: {config}")
 
+    logging.debug("Serving the admin settings page.")
     return render_template('admin.html', title='Admin Settings', config=config)
 
 @app.route('/superuser', methods=['GET', 'POST'])
 def superuser():
     if not session.get('logged_in') or session.get('username') != 'admin':
         flash('You do not have access to this page.')
+        logging.warning("Unauthorized access attempt to superuser page.")
         return redirect(url_for('index'))
 
     if request.method == 'POST':
@@ -64,6 +79,7 @@ def superuser():
             new_password = request.form.get('password')
             if new_username in users:
                 flash('User already exists.')
+                logging.warning(f"Attempted to add existing user: {new_username}")
             else:
                 users[new_username] = generate_password_hash(new_password)
                 flash(f'User {new_username} added successfully.')
@@ -77,6 +93,7 @@ def superuser():
                 logging.info(f"Superuser deleted user: {user_to_delete}")
             else:
                 flash('Cannot delete admin or non-existent user.')
+                logging.warning(f"Attempted to delete user: {user_to_delete}")
 
         if 'update_api_keys' in request.form:
             config['SHUFFLE_API_KEY'] = request.form.get('shuffle_api_key')
@@ -84,6 +101,7 @@ def superuser():
             config['START_TIME'] = request.form.get('start_time')
             logging.info(f"Superuser updated API keys: {config}")
 
+    logging.debug("Serving the superuser settings page.")
     return render_template('superuser.html', title='Superuser Settings', config=config, users=users)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -100,6 +118,7 @@ def login():
             flash('Invalid username or password.')
             logging.warning(f"Failed login attempt for username: {username}")
 
+    logging.debug("Serving the login page.")
     return render_template('login.html', title='Login')
 
 @app.route('/logout')
@@ -116,4 +135,5 @@ def page_not_found(e):
 
 # Running the app for production (debug mode turned off)
 if __name__ == "__main__":
+    logging.info("Starting the Flask application.")
     app.run(debug=False, host='0.0.0.0', port=8000)
