@@ -114,5 +114,6 @@ def page_not_found(e):
     logging.warning(f"404 error - page not found: {request.path}")
     return render_template('404.html', title='404 - Page Not Found'), 404
 
+# Running the app for production (debug mode turned off)
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False, host='0.0.0.0', port=8000)
