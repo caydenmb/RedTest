@@ -6,15 +6,15 @@ import logging
 
 # Flask application initialization
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Use a secure value for production
+app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Replace with a secure value
 
-# Configure logging for debugging and operations
+# Configure detailed logging for debugging and operations
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.FileHandler("app.log"),  # Log all messages to 'app.log'
-        logging.StreamHandler()  # Output messages to the console as well
+        logging.StreamHandler()  # Also output messages to the console
     ]
 )
 
@@ -41,12 +41,12 @@ logging.info("Flask application instance initialized and ready to serve requests
 
 @app.before_first_request
 def before_first_request():
-    # This runs before handling the first request and can be used for initialization tasks
-    logging.info("First request received - initializing components if necessary.")
+    logging.info("First request received - initializing any additional components if necessary.")
 
-# Utility function for API requests
+# Utility function for API requests with additional logging
 def fetch_data_from_api(url):
     try:
+        logging.debug(f"Fetching data from API: {url}")
         response = requests.get(url)
         response.raise_for_status()  # Raise an exception for HTTP errors
         data = response.json()
@@ -71,9 +71,11 @@ def shuffle_wager():
         logging.warning("Shuffle Wager Event is disabled - serving no_event page.")
         return render_template('no_event.html', title='No Race Available')
     
-    # Fetch data from Shuffle API (dummy example)
+    # Fetch data from Shuffle API
     url = f"https://api.shuffle.com/data?key={config['SHUFFLE_API_KEY']}"
     data = fetch_data_from_api(url)
+    if 'error' in data:
+        flash("There was an issue fetching data from the Shuffle API.")
     
     logging.info("Serving Shuffle Wager Event page.")
     return render_template('shuffle_wager.html', title='Shuffle Wager Event', config=config, data=data)
@@ -84,9 +86,11 @@ def shuffle_raffle():
         logging.warning("Shuffle Raffle Event is disabled - serving no_event page.")
         return render_template('no_event.html', title='No Race Available')
     
-    # Fetch data from Shuffle API for Raffle (dummy example)
+    # Fetch data from Shuffle API for Raffle
     url = f"https://api.shuffle.com/raffle?key={config['SHUFFLE_API_KEY']}"
     data = fetch_data_from_api(url)
+    if 'error' in data:
+        flash("There was an issue fetching data from the Shuffle Raffle API.")
     
     logging.info("Serving Shuffle Raffle Event page.")
     return render_template('shuffle_raffle.html', title='Shuffle Raffle Event', config=config, data=data)
@@ -97,9 +101,11 @@ def chicken():
         logging.warning("Chicken.gg Wager Event is disabled - serving no_event page.")
         return render_template('no_event.html', title='No Race Available')
     
-    # Fetch data from Chicken API (dummy example)
+    # Fetch data from Chicken API
     url = CHICKEN_BASE_URL.format(api_key=config['CHICKEN_API_KEY'], min_time=config['START_TIME'], max_time=int(os.getenv('MAX_TIME', 9999999999)))
     data = fetch_data_from_api(url)
+    if 'error' in data:
+        flash("There was an issue fetching data from the Chicken API.")
     
     logging.info("Serving Chicken.gg Wager Event page.")
     return render_template('chicken.html', title='Chicken.gg Wager Event', config=config, data=data)
