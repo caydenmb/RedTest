@@ -1,8 +1,6 @@
-flask
-flask_sqlalchemy
-flask_migrate
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
 gunicorn
 psycopg2-binary
 requests
-logging
-Flask-Migrate
