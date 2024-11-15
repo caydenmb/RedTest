@@ -1,23 +1,29 @@
 import os
+import requests
 from flask import Flask, render_template, redirect, url_for, session, request, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
 
 # Flask application initialization
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Replace 'your_secret_key' with a secure value
+app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Use a secure value for production
 
-# Configure detailed logging for debugging and operations
+# Configure logging for debugging and operations
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler("app.log"),  # Log messages are saved to app.log
-        logging.StreamHandler()  # Messages are also output to the console
+        logging.FileHandler("app.log"),  # Log all messages to 'app.log'
+        logging.StreamHandler()  # Output messages to the console as well
     ]
 )
 
-# In-memory storage for users and application configuration (Note: Replace this with a database for production)
+# API Keys and URLs
+SHUFFLE_API_KEY = "f45f746d-b021-494d-b9b6-b47628ee5cc9"
+CHICKEN_API_KEY = "316a2f45bff17a887b8a37748e61ac06"
+CHICKEN_BASE_URL = "https://affiliates.chicken.gg/v1/referrals?key={api_key}&minTime={min_time}&maxTime={max_time}"
+
+# In-memory storage for users and application configuration (Note: Replace with a database for production)
 users = {
     'admin': generate_password_hash('password')  # Default admin credentials
 }
@@ -25,10 +31,34 @@ config = {
     'SHUFFLE_WAGER_ENABLED': True,
     'SHUFFLE_RAFFLE_ENABLED': True,
     'CHICKEN_ENABLED': True,
-    'SHUFFLE_API_KEY': 'default_shuffle_key',
-    'CHICKEN_API_KEY': 'default_chicken_key',
+    'SHUFFLE_API_KEY': SHUFFLE_API_KEY,
+    'CHICKEN_API_KEY': CHICKEN_API_KEY,
     'START_TIME': 1620000000  # Example start time in epoch format
 }
+
+# Log worker startup
+logging.info("Flask application instance initialized and ready to serve requests.")
+
+@app.before_first_request
+def before_first_request():
+    # This runs before handling the first request and can be used for initialization tasks
+    logging.info("First request received - initializing components if necessary.")
+
+# Utility function for API requests
+def fetch_data_from_api(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        data = response.json()
+        if isinstance(data, list) and len(data) > 0:
+            logging.info(f"Data fetched successfully from API: {url}")
+            return data
+        else:
+            logging.warning(f"No data found for the provided URL: {url}")
+            return {"error": "No data found."}
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching data from API: {e}")
+        return {"error": str(e)}
 
 @app.route('/')
 def index():
@@ -38,26 +68,41 @@ def index():
 @app.route('/shuffle_wager')
 def shuffle_wager():
     if not config['SHUFFLE_WAGER_ENABLED']:
-        logging.warning("Shuffle Wager Event is disabled.")
+        logging.warning("Shuffle Wager Event is disabled - serving no_event page.")
         return render_template('no_event.html', title='No Race Available')
+    
+    # Fetch data from Shuffle API (dummy example)
+    url = f"https://api.shuffle.com/data?key={config['SHUFFLE_API_KEY']}"
+    data = fetch_data_from_api(url)
+    
     logging.info("Serving Shuffle Wager Event page.")
-    return render_template('shuffle_wager.html', title='Shuffle Wager Event', config=config)
+    return render_template('shuffle_wager.html', title='Shuffle Wager Event', config=config, data=data)
 
 @app.route('/shuffle_raffle')
 def shuffle_raffle():
     if not config['SHUFFLE_RAFFLE_ENABLED']:
-        logging.warning("Shuffle Raffle Event is disabled.")
+        logging.warning("Shuffle Raffle Event is disabled - serving no_event page.")
         return render_template('no_event.html', title='No Race Available')
+    
+    # Fetch data from Shuffle API for Raffle (dummy example)
+    url = f"https://api.shuffle.com/raffle?key={config['SHUFFLE_API_KEY']}"
+    data = fetch_data_from_api(url)
+    
     logging.info("Serving Shuffle Raffle Event page.")
-    return render_template('shuffle_raffle.html', title='Shuffle Raffle Event', config=config)
+    return render_template('shuffle_raffle.html', title='Shuffle Raffle Event', config=config, data=data)
 
 @app.route('/chicken')
 def chicken():
     if not config['CHICKEN_ENABLED']:
-        logging.warning("Chicken.gg Wager Event is disabled.")
+        logging.warning("Chicken.gg Wager Event is disabled - serving no_event page.")
         return render_template('no_event.html', title='No Race Available')
+    
+    # Fetch data from Chicken API (dummy example)
+    url = CHICKEN_BASE_URL.format(api_key=config['CHICKEN_API_KEY'], min_time=config['START_TIME'], max_time=int(os.getenv('MAX_TIME', 9999999999)))
+    data = fetch_data_from_api(url)
+    
     logging.info("Serving Chicken.gg Wager Event page.")
-    return render_template('chicken.html', title='Chicken.gg Wager Event', config=config)
+    return render_template('chicken.html', title='Chicken.gg Wager Event', config=config, data=data)
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -143,4 +188,4 @@ def page_not_found(e):
     logging.warning(f"404 error - page not found: {request.path}")
     return render_template('404.html', title='404 - Page Not Found'), 404
 
-# The 'app.run()' line is intentionally omitted because Gunicorn will manage the application in production
+# Note: No app.run() here; Gunicorn will manage the application in production
