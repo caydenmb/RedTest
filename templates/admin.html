@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Admin Settings</h2>
+<form action="" method="POST">
+    <h3>Enable or Disable Events</h3>
+    <label>
+        <input type="checkbox" name="shuffle_wager_enabled" {% if config['SHUFFLE_WAGER_ENABLED'] %}checked{% endif %}> Shuffle Wager Event
+    </label><br>
+    <label>
+        <input type="checkbox" name="shuffle_raffle_enabled" {% if config['SHUFFLE_RAFFLE_ENABLED'] %}checked{% endif %}> Shuffle Raffle Event
+    </label><br>
+    <label>
+        <input type="checkbox" name="chicken_enabled" {% if config['CHICKEN_ENABLED'] %}checked{% endif %}> Chicken.gg Wager Event
+    </label><br><br>
+    <button type="submit">Update Settings</button>
+</form>
+{% endblock %}

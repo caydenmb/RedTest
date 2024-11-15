@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Superuser Settings</h2>
+
+<!-- API Settings Section -->
+<form action="" method="POST">
+    <h3>API Settings</h3>
+    <label>Shuffle API Key:</label>
+    <input type="text" name="shuffle_api_key" value="{{ config['SHUFFLE_API_KEY'] }}"><br>
+    <label>Chicken API Key:</label>
+    <input type="text" name="chicken_api_key" value="{{ config['CHICKEN_API_KEY'] }}"><br>
+    <label>Start Time (Epoch seconds):</label>
+    <input type="text" name="start_time" value="{{ config['START_TIME'] }}"><br><br>
+    <button type="submit" name="update_api_keys">Update API Settings</button>
+</form>
+<hr>
+
+<!-- User Management Section -->
+<h3>User Management</h3>
+<form action="" method="POST">
+    <label>Username:</label>
+    <input type="text" name="username">
+    <label>Password:</label>
+    <input type="password" name="password">
+    <button type="submit" name="add_user">Add User</button>
+</form>
+
+<!-- Existing Users Section -->
+<h3>Existing Users</h3>
+<form action="" method="POST">
+    <ul>
+        {% for user in users %}
+        <li>{{ user }}
+            {% if user != 'admin' %}
+            <button type="submit" name="delete_user" value="{{ user }}">Delete</button>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</form>
+{% endblock %}

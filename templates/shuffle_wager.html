@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="event-section">
+    <h2>Shuffle Wager Event Standings</h2>
+    {% if config['SHUFFLE_WAGER_ENABLED'] %}
+        <div id="shuffle-wager-standings"></div>
+    {% else %}
+        <p>No Race Available</p>
+        <a href="https://kick.com/redhunllef" class="button">Visit Redhunllef's Kick Page</a>
+    {% endif %}
+</div>
+{% endblock %}

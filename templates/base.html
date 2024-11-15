@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <img src="{{ url_for('static', filename='images/redlogo.png') }}" alt="Redhunllef Logo">
+        </div>
+        <h1>{{ title }}</h1>
+    </header>
+    <div class="sidebar">
+        <ul>
+            <li><a href="{{ url_for('index') }}">Home</a></li>
+            <li><a href="{{ url_for('shuffle_wager') }}">Shuffle Wager Event</a></li>
+            <li><a href="{{ url_for('shuffle_raffle') }}">Shuffle Raffle Event</a></li>
+            <li><a href="{{ url_for('chicken') }}">Chicken.gg Wager Event</a></li>
+            {% if session.get('logged_in') %}
+                <li><a href="{{ url_for('admin') }}">Admin</a></li>
+                {% if session.get('username') == 'admin' %}
+                    <li><a href="{{ url_for('superuser') }}">Superuser Settings</a></li>
+                {% endif %}
+                <li><a href="{{ url_for('logout') }}">Logout</a></li>
+            {% else %}
+                <li><a href="{{ url_for('login') }}">Login</a></li>
+            {% endif %}
+        </ul>
+    </div>
+    <div class="content">
+        {% block content %}{% endblock %}
+    </div>
+    <footer>
+        <p>Support Redhunllef by visiting our sponsors below.</p>
+        <div class="sponsor-buttons">
+            <a href="https://shuffle.com/?r=Red" class="button">Shuffle.com Sponsor</a>
+            <a href="https://chicken.gg/r/Red" class="button">Chicken.gg Sponsor</a>
+        </div>
+    </footer>
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+</body>
+</html>
