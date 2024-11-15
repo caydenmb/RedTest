@@ -1,1 +1,1 @@
-web: gunicorn -w 4 -b 0.0.0.0:8000 --timeout 120 --log-level debug app:app
+web: gunicorn --config gunicorn.conf.py app:app
