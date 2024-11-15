@@ -3,23 +3,23 @@ from flask import Flask, render_template, redirect, url_for, session, request, f
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
 
-# Application initialization
+# Flask application initialization
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Use a secure key
+app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Replace 'your_secret_key' with a secure value
 
-# Configure detailed logging
+# Configure detailed logging for debugging and operations
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler("app.log"),
-        logging.StreamHandler()
+        logging.FileHandler("app.log"),  # Log messages are saved to app.log
+        logging.StreamHandler()  # Messages are also output to the console
     ]
 )
 
-# In-memory database simulation for users and configuration
+# In-memory storage for users and application configuration (Note: Replace this with a database for production)
 users = {
-    'admin': generate_password_hash('password')
+    'admin': generate_password_hash('password')  # Default admin credentials
 }
 config = {
     'SHUFFLE_WAGER_ENABLED': True,
@@ -27,27 +27,36 @@ config = {
     'CHICKEN_ENABLED': True,
     'SHUFFLE_API_KEY': 'default_shuffle_key',
     'CHICKEN_API_KEY': 'default_chicken_key',
-    'START_TIME': 1620000000  # Example epoch start time
+    'START_TIME': 1620000000  # Example start time in epoch format
 }
 
 @app.route('/')
 def index():
-    logging.debug("Serving the index page.")
+    logging.info("Serving the index page.")
     return render_template('index.html', title='Redhunllef Event Platform')
 
 @app.route('/shuffle_wager')
 def shuffle_wager():
-    logging.debug(f"Shuffle Wager Event requested, enabled status: {config['SHUFFLE_WAGER_ENABLED']}")
+    if not config['SHUFFLE_WAGER_ENABLED']:
+        logging.warning("Shuffle Wager Event is disabled.")
+        return render_template('no_event.html', title='No Race Available')
+    logging.info("Serving Shuffle Wager Event page.")
     return render_template('shuffle_wager.html', title='Shuffle Wager Event', config=config)
 
 @app.route('/shuffle_raffle')
 def shuffle_raffle():
-    logging.debug(f"Shuffle Raffle Event requested, enabled status: {config['SHUFFLE_RAFFLE_ENABLED']}")
+    if not config['SHUFFLE_RAFFLE_ENABLED']:
+        logging.warning("Shuffle Raffle Event is disabled.")
+        return render_template('no_event.html', title='No Race Available')
+    logging.info("Serving Shuffle Raffle Event page.")
     return render_template('shuffle_raffle.html', title='Shuffle Raffle Event', config=config)
 
 @app.route('/chicken')
 def chicken():
-    logging.debug(f"Chicken.gg Wager Event requested, enabled status: {config['CHICKEN_ENABLED']}")
+    if not config['CHICKEN_ENABLED']:
+        logging.warning("Chicken.gg Wager Event is disabled.")
+        return render_template('no_event.html', title='No Race Available')
+    logging.info("Serving Chicken.gg Wager Event page.")
     return render_template('chicken.html', title='Chicken.gg Wager Event', config=config)
 
 @app.route('/admin', methods=['GET', 'POST'])
@@ -58,12 +67,13 @@ def admin():
         return redirect(url_for('login'))
     
     if request.method == 'POST':
+        # Update configuration based on form data
         config['SHUFFLE_WAGER_ENABLED'] = 'shuffle_wager_enabled' in request.form
         config['SHUFFLE_RAFFLE_ENABLED'] = 'shuffle_raffle_enabled' in request.form
         config['CHICKEN_ENABLED'] = 'chicken_enabled' in request.form
         logging.info(f"Admin updated event settings: {config}")
 
-    logging.debug("Serving the admin settings page.")
+    logging.info("Serving the admin settings page.")
     return render_template('admin.html', title='Admin Settings', config=config)
 
 @app.route('/superuser', methods=['GET', 'POST'])
@@ -101,7 +111,7 @@ def superuser():
             config['START_TIME'] = request.form.get('start_time')
             logging.info(f"Superuser updated API keys: {config}")
 
-    logging.debug("Serving the superuser settings page.")
+    logging.info("Serving the superuser settings page.")
     return render_template('superuser.html', title='Superuser Settings', config=config, users=users)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -118,7 +128,7 @@ def login():
             flash('Invalid username or password.')
             logging.warning(f"Failed login attempt for username: {username}")
 
-    logging.debug("Serving the login page.")
+    logging.info("Serving the login page.")
     return render_template('login.html', title='Login')
 
 @app.route('/logout')
@@ -133,4 +143,4 @@ def page_not_found(e):
     logging.warning(f"404 error - page not found: {request.path}")
     return render_template('404.html', title='404 - Page Not Found'), 404
 
-# Notice: The `app.run()` line is intentionally omitted to ensure Gunicorn manages the application.
+# The 'app.run()' line is intentionally omitted because Gunicorn will manage the application in production
