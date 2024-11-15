@@ -1,87 +1,61 @@
 # gunicorn.conf.py
 
-import multiprocessing
+# Server Socket
+bind = '0.0.0.0:8000'  # This binds the server to all available IP addresses on port 8000
+backlog = 2048         # Number of connections that can be queued
 
-# Socket settings
-bind = "0.0.0.0:8000"  # The address to which the server will bind
-backlog = 2048  # The number of pending connections the server will hold
+# Worker Processes
+workers = 4            # Number of worker processes to handle requests
+worker_class = 'sync'  # The type of worker to use, sync is the default
+threads = 2            # Number of threads per worker
+worker_connections = 1000  # Maximum number of simultaneous connections
+max_requests = 1000    # Number of requests a worker will process before restarting
+max_requests_jitter = 50  # Random jitter to avoid workers restarting at the same time
+timeout = 120          # Timeout for a worker to handle a request before being killed
+graceful_timeout = 30  # Time given to a worker to shut down gracefully
+keepalive = 2          # The number of seconds to wait for the next request
 
-# Worker settings
-workers = max(2, multiprocessing.cpu_count() * 2 + 1)  # Number of worker processes (adjust based on CPU count)
-worker_class = "gthread"  # Worker type, using gthread for multi-threading capabilities
-threads = 2  # Number of threads per worker
-worker_connections = 1000  # Maximum number of simultaneous clients a worker can handle
-max_requests = 1000  # Restart a worker after this many requests to reduce memory leakage
-max_requests_jitter = 50  # Add jitter to avoid workers restarting all at once
-timeout = 120  # Workers will be killed and restarted if they are idle for longer than this
-graceful_timeout = 30  # Timeout for graceful worker restarts
-keepalive = 2  # Keep-alive duration for HTTP connections in seconds
+# Logging
+accesslog = '-'        # Log all access requests to stdout
+errorlog = '-'         # Log errors to stdout
+loglevel = 'debug'     # Set log level to debug for more verbose output
+capture_output = True  # Capture stdout and stderr in log
 
-# Logging settings
-loglevel = "debug"  # Logging level: debug, info, warning, error, critical
-capture_output = True  # Capture stdout and stderr to log output
-accesslog = "-"  # Access log file ("-" means output to stderr)
-errorlog = "-"  # Error log file ("-" means output to stderr)
-access_log_format = (
-    '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
-)  # Log format for access log entries
-
-# Environment settings
-raw_env = [
-    "DATABASE_URL=postgresql://user:password@localhost/dbname",  # Replace with your database URL
-    "FLASK_ENV=production",  # Set the Flask environment to production
-]
-
-# Security settings
+# Security Headers
 secure_scheme_headers = {
-    "X-FORWARDED-PROTOCOL": "ssl",
-    "X-FORWARDED-PROTO": "https",
-    "X-FORWARDED-SSL": "on",
+    'X-FORWARDED-PROTOCOL': 'ssl',
+    'X-FORWARDED-PROTO': 'https',
+    'X-FORWARDED-SSL': 'on',
 }
-forwarded_allow_ips = "*"  # Allow all IPs for forwarded requests
-reuse_port = False  # Reuse a port between multiple processes
+forwarded_allow_ips = '*'  # Allows connections from all forwarded IPs
 
-# SSL settings (if using SSL)
-keyfile = None  # Path to the SSL key file
-certfile = None  # Path to the SSL certificate file
+# SSL/TLS Configuration (if applicable)
 ssl_version = 2  # SSL version to use
-cert_reqs = 0  # SSL certificate requirement level (None in this case)
-ca_certs = None  # Path to CA certificate file
-suppress_ragged_eofs = True  # Suppress "ragged EOF" exceptions
-do_handshake_on_connect = False  # Perform SSL handshake on new connections
-ciphers = None  # String specifying available ciphers
+cert_reqs = 0    # Certificate requirements (0 = optional)
 
-# Process naming and lifecycle
-proc_name = "gunicorn_app"  # The name of the Gunicorn process
-pidfile = None  # Path to the PID file
-worker_tmp_dir = None  # Directory to store temporary worker files
-user = 1000  # Worker process user ID
-group = 1000  # Worker process group ID
-umask = 0  # File creation mask
-initgroups = False  # Whether to set the worker process's supplementary groups
+# Custom Hooks (These hooks allow logging or other actions during server lifecycle)
+def on_starting(server):
+    print("Server is starting...")
 
-# Lifecycle hooks
-on_starting = None  # Function to run before the server starts
-when_ready = None  # Function to run once the server is ready
-pre_fork = None  # Function to run before a worker forks
-post_fork = None  # Function to run after a worker forks
-post_worker_init = None  # Function to run after a worker has initialized
-worker_int = None  # Function to run when a worker receives INT or QUIT signals
-worker_abort = None  # Function to run when a worker receives SIGABRT signal
-pre_exec = None  # Function to run just before the worker forks the process
-pre_request = None  # Function to run just before handling a request
-post_request = None  # Function to run just after handling a request
-child_exit = None  # Function to run when a child worker exits
-worker_exit = None  # Function to run when a worker exits
-nworkers_changed = None  # Function to run when the number of workers changes
-on_exit = None  # Function to run when the master process exits
+def when_ready(server):
+    print("Server is ready. Spawning workers.")
 
-# Additional request parsing settings
-limit_request_line = 4094  # The maximum size of HTTP request line in bytes
-limit_request_fields = 100  # Maximum number of HTTP headers allowed in a request
-limit_request_field_size = 8190  # Maximum size of an HTTP request header in bytes
+def pre_fork(server, worker):
+    print(f"Pre-forking worker {worker.pid}...")
 
-# Request forwarding and proxy settings
-proxy_protocol = False  # Enable Proxy Protocol
-proxy_allow_ips = ["127.0.0.1", "::1"]  # Allowlist of IPs for proxy
-forwarder_headers = ["SCRIPT_NAME", "PATH_INFO"]  # Headers to use for forwarding
+def post_fork(server, worker):
+    print(f"Worker {worker.pid} has been forked.")
+
+def worker_exit(server, worker):
+    print(f"Worker with PID {worker.pid} has exited.")
+
+def on_exit(server):
+    print("Server is shutting down...")
+
+# Assigning hooks to make sure all are callable
+on_starting = on_starting
+when_ready = when_ready
+pre_fork = pre_fork
+post_fork = post_fork
+worker_exit = worker_exit
+on_exit = on_exit
