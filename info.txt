@@ -1,0 +1,673 @@
+To provide a tabbed, interactive, and fast-loading webpage for a livestreamer, I'll extend the use of React for a Single Page Application (SPA). The following solution uses React with React Router to create easily navigable tabs for sponsor leaderboards, ensuring a smooth and fast user experience.
+
+The file structure is organized as follows:
+
+```
+modern-livestreamer-website/
+  |- backend/
+  |    |- app.py
+  |- frontend/
+       |- public/
+       |    |- index.html
+       |    |- favicon.png
+       |- src/
+           |- components/
+           |    |- Header.js
+           |    |- SponsorButtons.js
+           |    |- Leaderboard.js
+           |- pages/
+           |    |- HomePage.js
+           |    |- SponsorLeaderboard.js
+           |- App.js
+           |- index.js
+           |- App.css
+       |- package.json
+```
+
+### Backend (Flask)
+
+#### File: `backend/app.py`
+```python
+from flask import Flask, jsonify, render_template
+import requests
+from datetime import datetime, timedelta
+import pytz
+import logging
+
+app = Flask(__name__, static_folder='../frontend/build', template_folder='../frontend/build')
+
+# Set up logging for easy deployment monitoring
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# API key and URL for PackDraw
+api_key = "8cbb2008-f672-454b-907d-aebab8a81485"
+url_template = "https://packdraw.com/api/v1/affiliates/leaderboard?after={start_time}&before={end_time}&apiKey={api_key}"
+eastern = pytz.timezone("US/Eastern")
+
+@app.route("/api/leaderboard/<sponsor>", methods=["GET"])
+def get_leaderboard(sponsor):
+    # Define start and end times
+    start_time = datetime(2024, 11, 1, 0, 0, 0, tzinfo=eastern).isoformat()
+    end_time = datetime.now(tz=eastern) - timedelta(seconds=15)
+    
+    # Format URL with parameters
+    url = url_template.format(start_time=start_time, end_time=end_time.isoformat(), api_key=api_key)
+    logger.info(f"Fetching leaderboard data for sponsor: {sponsor}")
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            if 'leaderboard' in data:
+                sorted_data = sorted(data['leaderboard'], key=lambda x: x['wagerAmount'], reverse=True)
+                logger.info(f"Successfully fetched leaderboard data for sponsor: {sponsor}")
+                return jsonify(sorted_data[:11])
+        logger.error(f"Failed to fetch leaderboard data for sponsor: {sponsor}, status code: {response.status_code}")
+        return jsonify({"error": "Unable to fetch leaderboard data"}), 500
+    except Exception as e:
+        logger.exception(f"Error fetching leaderboard data for sponsor: {sponsor}")
+        return jsonify({"error": str(e)}), 500
+
+# Serve React frontend for all other routes
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    logger.info(f"Serving frontend for path: {path}")
+    return render_template('index.html')
+
+if __name__ == "__main__":
+    logger.info("Starting Flask server on port 8080")
+    app.run(port=8080)
+```
+
+### Front-End (React)
+
+#### File: `frontend/public/index.html`
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redhunllef Livestream</title>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
+```
+
+#### File: `frontend/src/index.js`
+```javascript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import './App.css';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+);
+
+console.log("React application initialized successfully.");
+```
+
+#### File: `frontend/src/App.js`
+```javascript
+import React from 'react';
+import { Routes, Route, Link, Navigate } from 'react-router-dom';
+import HomePage from './pages/HomePage';
+import SponsorLeaderboard from './pages/SponsorLeaderboard';
+import Header from './components/Header';
+import './App.css';
+
+function App() {
+  console.log("App component loaded.");
+
+  return (
+    <div className="App">
+      <Header />
+      <nav className="tab-nav">
+        <Link to="/" className="tab-link">Home</Link>
+        <Link to="/sponsor1" className="tab-link">Sponsor 1 Leaderboard</Link>
+        <Link to="/sponsor2" className="tab-link">Sponsor 2 Leaderboard</Link>
+      </nav>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/sponsor1" element={<SponsorLeaderboard sponsor="sponsor1" />} />
+        <Route path="/sponsor2" element={<SponsorLeaderboard sponsor="sponsor2" />} />
+        {/* Catch-all route to redirect to HomePage */}
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </div>
+  );
+}
+
+export default App;
+```
+
+#### File: `frontend/src/pages/HomePage.js`
+```javascript
+import React from 'react';
+import SponsorButtons from '../components/SponsorButtons';
+
+const HomePage = () => {
+  console.log("HomePage component loaded.");
+
+  return (
+    <div className="home-page">
+      <SponsorButtons />
+    </div>
+  );
+};
+
+export default HomePage;
+```
+
+#### File: `frontend/src/pages/SponsorLeaderboard.js`
+```javascript
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+
+const SponsorLeaderboard = ({ sponsor }) => {
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        console.log(`Fetching leaderboard data for sponsor: ${sponsor}`);
+        const response = await axios.get(`/api/leaderboard/${sponsor}`);
+        setLeaderboard(response.data);
+        console.log(`Successfully fetched leaderboard data for sponsor: ${sponsor}`);
+      } catch (error) {
+        console.error(`Error fetching leaderboard data for sponsor: ${sponsor}`, error);
+      }
+    };
+    fetchData();
+  }, [sponsor]);
+
+  return (
+    <div className="leaderboard-page">
+      <h2 className="text-3xl font-semibold mb-6 text-center text-white">{sponsor} Leaderboard</h2>
+      <div className="flex justify-center gap-8 mb-8">
+        {leaderboard.slice(0, 3).map((entry, index) => (
+          <div key={index} className={`p-6 rounded-xl shadow-lg bg-gray-800 ${index === 0 ? 'scale-110' : ''}`}>
+            <h3 className="text-2xl font-bold text-yellow-500">{index + 1} Place: {entry.username}</h3>
+            <p className="text-lg text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {leaderboard.slice(3).map((entry, index) => (
+          <div key={index} className="p-4 rounded-xl shadow-md bg-gray-700">
+            <h4 className="text-lg text-white">{index + 4} Place: {entry.username}</h4>
+            <p className="text-md text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default SponsorLeaderboard;
+```
+
+#### File: `frontend/src/components/Header.js`
+```javascript
+import React from 'react';
+import { motion } from 'framer-motion';
+
+const Header = () => {
+  console.log("Header component loaded.");
+
+  return (
+    <header className="text-center my-10">
+      <motion.img
+        src="/static/redlogo.png"
+        alt="Redhunllef Logo"
+        className="mx-auto"
+        animate={{ y: [0, -15, 0] }}
+        transition={{ duration: 1, repeat: Infinity }}
+      />
+    </header>
+  );
+};
+
+export default Header;
+```
+
+#### File: `frontend/src/components/SponsorButtons.js`
+```javascript
+import React from 'react';
+
+const SponsorButtons = () => {
+  console.log("SponsorButtons component loaded.");
+
+  const sponsors = [
+    { name: "Shuffle.com", link: "https://shuffle.com/?r=Red" },
+    { name: "PackDraw.com", link: "https://packdraw.com/?ref=red" }
+  ];
+
+  return (
+    <div className="flex flex-wrap justify-center gap-6 my-8">
+      {sponsors.map((sponsor, index) => (
+        <a
+          key={index}
+          href={sponsor.link}
+          className="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 px-8 rounded-full transform hover:scale-105 transition-transform"
+        >
+          {sponsor.name}
+        </a>
+      ))}
+    </div>
+  );
+};
+
+export default SponsorButtons;
+```
+
+#### File: `frontend/src/components/Leaderboard.js`
+```javascript
+import React from 'react';
+
+const Leaderboard = ({ leaderboard }) => {
+  console.log("Leaderboard component loaded.");
+
+  return (
+    <div className="leaderboard">
+      <div className="flex justify-center gap-8 mb-8">
+        {leaderboard.slice(0, 3).map((entry, index) => (
+          <div key={index} className={`p-6 rounded-xl shadow-lg bg-gray-800 ${index === 0 ? 'scale-110' : ''}`}>
+            <h3 className="text-2xl font-bold text-yellow-500">{index + 1} Place: {entry.username}</h3>
+            <p className="text-lg text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {leaderboard.slice(3).map((entry, index) => (
+          <div key={index} className="p-4 rounded-xl shadow-md bg-gray-700">
+            <h4 className="text-lg text-white">{index + 4} Place: {entry.username}</h4>
+            <p className="text-md text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default Leaderboard;
+```
+
+#### File: `frontend/src/App.css`
+```css
+To provide a tabbed, interactive, and fast-loading webpage for a livestreamer, I'll extend the use of React for a Single Page Application (SPA). The following solution uses React with React Router to create easily navigable tabs for sponsor leaderboards, ensuring a smooth and fast user experience.
+
+The file structure is organized as follows:
+
+```
+modern-livestreamer-website/
+  |- backend/
+  |    |- app.py
+  |- frontend/
+       |- public/
+       |    |- index.html
+       |    |- favicon.png
+       |- src/
+           |- components/
+           |    |- Header.js
+           |    |- SponsorButtons.js
+           |    |- Leaderboard.js
+           |- pages/
+           |    |- HomePage.js
+           |    |- SponsorLeaderboard.js
+           |- App.js
+           |- index.js
+           |- App.css
+       |- package.json
+```
+
+### Backend (Flask)
+
+#### File: `backend/app.py`
+```python
+from flask import Flask, jsonify, render_template
+import requests
+from datetime import datetime, timedelta
+import pytz
+import logging
+
+app = Flask(__name__, static_folder='../frontend/build', template_folder='../frontend/build')
+
+# Set up logging for easy deployment monitoring
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# API key and URL for PackDraw
+api_key = "8cbb2008-f672-454b-907d-aebab8a81485"
+url_template = "https://packdraw.com/api/v1/affiliates/leaderboard?after={start_time}&before={end_time}&apiKey={api_key}"
+eastern = pytz.timezone("US/Eastern")
+
+@app.route("/api/leaderboard/<sponsor>", methods=["GET"])
+def get_leaderboard(sponsor):
+    # Define start and end times
+    start_time = datetime(2024, 11, 1, 0, 0, 0, tzinfo=eastern).isoformat()
+    end_time = datetime.now(tz=eastern) - timedelta(seconds=15)
+    
+    # Format URL with parameters
+    url = url_template.format(start_time=start_time, end_time=end_time.isoformat(), api_key=api_key)
+    logger.info(f"Fetching leaderboard data for sponsor: {sponsor}")
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            if 'leaderboard' in data:
+                sorted_data = sorted(data['leaderboard'], key=lambda x: x['wagerAmount'], reverse=True)
+                logger.info(f"Successfully fetched leaderboard data for sponsor: {sponsor}")
+                return jsonify(sorted_data[:11])
+        logger.error(f"Failed to fetch leaderboard data for sponsor: {sponsor}, status code: {response.status_code}")
+        return jsonify({"error": "Unable to fetch leaderboard data"}), 500
+    except Exception as e:
+        logger.exception(f"Error fetching leaderboard data for sponsor: {sponsor}")
+        return jsonify({"error": str(e)}), 500
+
+# Serve React frontend for all other routes
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    logger.info(f"Serving frontend for path: {path}")
+    return render_template('index.html')
+
+if __name__ == "__main__":
+    logger.info("Starting Flask server on port 8080")
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=8080)
+```
+
+### Front-End (React)
+
+#### File: `frontend/public/index.html`
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redhunllef Livestream</title>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
+```
+
+#### File: `frontend/src/index.js`
+```javascript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import './App.css';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+);
+
+console.log("React application initialized successfully.");
+```
+
+#### File: `frontend/src/App.js`
+```javascript
+import React from 'react';
+import { Routes, Route, Link, Navigate } from 'react-router-dom';
+import HomePage from './pages/HomePage';
+import SponsorLeaderboard from './pages/SponsorLeaderboard';
+import Header from './components/Header';
+import './App.css';
+
+function App() {
+  console.log("App component loaded.");
+
+  return (
+    <div className="App">
+      <Header />
+      <nav className="tab-nav">
+        <Link to="/" className="tab-link">Home</Link>
+        <Link to="/sponsor1" className="tab-link">Sponsor 1 Leaderboard</Link>
+        <Link to="/sponsor2" className="tab-link">Sponsor 2 Leaderboard</Link>
+      </nav>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/sponsor1" element={<SponsorLeaderboard sponsor="sponsor1" />} />
+        <Route path="/sponsor2" element={<SponsorLeaderboard sponsor="sponsor2" />} />
+        {/* Catch-all route to redirect to HomePage */}
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </div>
+  );
+}
+
+export default App;
+```
+
+#### File: `frontend/src/pages/HomePage.js`
+```javascript
+import React from 'react';
+import SponsorButtons from '../components/SponsorButtons';
+
+const HomePage = () => {
+  console.log("HomePage component loaded.");
+
+  return (
+    <div className="home-page">
+      <SponsorButtons />
+    </div>
+  );
+};
+
+export default HomePage;
+```
+
+#### File: `frontend/src/pages/SponsorLeaderboard.js`
+```javascript
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+
+const SponsorLeaderboard = ({ sponsor }) => {
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        console.log(`Fetching leaderboard data for sponsor: ${sponsor}`);
+        const response = await axios.get(`/api/leaderboard/${sponsor}`);
+        setLeaderboard(response.data);
+        console.log(`Successfully fetched leaderboard data for sponsor: ${sponsor}`);
+      } catch (error) {
+        console.error(`Error fetching leaderboard data for sponsor: ${sponsor}`, error);
+      }
+    };
+    fetchData();
+  }, [sponsor]);
+
+  return (
+    <div className="leaderboard-page">
+      <h2 className="text-3xl font-semibold mb-6 text-center text-white">{sponsor} Leaderboard</h2>
+      <div className="flex justify-center gap-8 mb-8">
+        {leaderboard.slice(0, 3).map((entry, index) => (
+          <div key={index} className={`p-6 rounded-xl shadow-lg bg-gray-800 ${index === 0 ? 'scale-110' : ''}`}>
+            <h3 className="text-2xl font-bold text-yellow-500">{index + 1} Place: {entry.username}</h3>
+            <p className="text-lg text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {leaderboard.slice(3).map((entry, index) => (
+          <div key={index} className="p-4 rounded-xl shadow-md bg-gray-700">
+            <h4 className="text-lg text-white">{index + 4} Place: {entry.username}</h4>
+            <p className="text-md text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default SponsorLeaderboard;
+```
+
+#### File: `frontend/src/components/Header.js`
+```javascript
+import React from 'react';
+import { motion } from 'framer-motion';
+
+const Header = () => {
+  console.log("Header component loaded.");
+
+  return (
+    <header className="text-center my-10">
+      <motion.img
+        src="/static/redlogo.png"
+        alt="Redhunllef Logo"
+        className="mx-auto"
+        animate={{ y: [0, -15, 0] }}
+        transition={{ duration: 1, repeat: Infinity }}
+      />
+    </header>
+  );
+};
+
+export default Header;
+```
+
+#### File: `frontend/src/components/SponsorButtons.js`
+```javascript
+import React from 'react';
+
+const SponsorButtons = () => {
+  console.log("SponsorButtons component loaded.");
+
+  const sponsors = [
+    { name: "Shuffle.com", link: "https://shuffle.com/?r=Red" },
+    { name: "PackDraw.com", link: "https://packdraw.com/?ref=red" }
+  ];
+
+  return (
+    <div className="flex flex-wrap justify-center gap-6 my-8">
+      {sponsors.map((sponsor, index) => (
+        <a
+          key={index}
+          href={sponsor.link}
+          className="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 px-8 rounded-full transform hover:scale-105 transition-transform"
+        >
+          {sponsor.name}
+        </a>
+      ))}
+    </div>
+  );
+};
+
+export default SponsorButtons;
+```
+
+#### File: `frontend/src/components/Leaderboard.js`
+```javascript
+import React from 'react';
+
+const Leaderboard = ({ leaderboard }) => {
+  console.log("Leaderboard component loaded.");
+
+  return (
+    <div className="leaderboard">
+      <div className="flex justify-center gap-8 mb-8">
+        {leaderboard.slice(0, 3).map((entry, index) => (
+          <div key={index} className={`p-6 rounded-xl shadow-lg bg-gray-800 ${index === 0 ? 'scale-110' : ''}`}>
+            <h3 className="text-2xl font-bold text-yellow-500">{index + 1} Place: {entry.username}</h3>
+            <p className="text-lg text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {leaderboard.slice(3).map((entry, index) => (
+          <div key={index} className="p-4 rounded-xl shadow-md bg-gray-700">
+            <h4 className="text-lg text-white">{index + 4} Place: {entry.username}</h4>
+            <p className="text-md text-gray-300">Wager: ${entry.wagerAmount.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default Leaderboard;
+```
+
+#### File: `frontend/src/App.css`
+```css
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Roboto', sans-serif;
+  background-color: #1a1a1a;
+  color: #f0f0f0;
+  min-height: 100vh;
+}
+
+.tab-nav {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.tab-link {
+  margin: 0 15px;
+  padding: 10px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: bold;
+  transition: color 0.3s ease;
+}
+
+.tab-link:hover {
+  color: #53fc18;
+}
+
+.leaderboard-page {
+  padding: 20px;
+}
+
+.home-page {
+  padding: 20px;
+}
+```
+
+### Summary of Features:
+1. **Tabbed Navigation**: Using React Router, users can easily switch between different sponsor leaderboards.
+2. **Fast Loading**: The site is a SPA, ensuring seamless navigation without full page reloads.
+3. **Responsive Styling**: Tailwind CSS for responsive, visually appealing components with hover effects.
+4. **Real-Time Leaderboards**: Each sponsor leaderboard is dynamically fetched via the Flask backend, providing updated data on each visit.
+5. **Console Logging for Deployment**: Console logs have been added across components and Flask backend to provide detailed status and error information, making deployment monitoring easier.
+6. **Production Server**: Updated Flask to use `waitress` as the WSGI server for production deployment, addressing the warning in DigitalOcean App Platform logs.
+
+This setup offers a sleek, fast, and interactive user experience for your audience. Let me know if you need further customization or additional features!
+```
+
+### Summary of Features:
+1. **Tabbed Navigation**: Using React Router, users can easily switch between different sponsor leaderboards.
+2. **Fast Loading**: The site is a SPA, ensuring seamless navigation without full page reloads.
+3. **Responsive Styling**: Tailwind CSS for responsive, visually appealing components with hover effects.
+4. **Real-Time Leaderboards**: Each sponsor leaderboard is dynamically fetched via the Flask backend, providing updated data on each visit.
+5. **Console Logging for Deployment**: Console logs have been added across components and Flask backend to provide detailed status and error information, making deployment monitoring easier.
+
+This setup offers a sleek, fast, and interactive user experience for your audience. Let me know if you need further customization or additional features!
